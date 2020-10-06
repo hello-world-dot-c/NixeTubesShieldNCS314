@@ -48,9 +48,7 @@
 //25.09.2016 update to HW ver 1.1
 //25.05.2016
 
-//#define tubes8
-#define tubes6
-//#define tubes4
+#define NUM_TUBES 6
 
 #include <Arduino.h>
 
@@ -58,11 +56,14 @@
 #include <Wire.h>
 #include <ClickButton.h>
 #include <TimeLib.h>
-#include <Tone.h>
 #include <EEPROM.h>
 #include "doIndication314_HW3.x.h"
 #include "rotateFireWorks_SK.h"
 #include <OneWire.h>
+
+#if defined(USE_TONE) && USE_TONE
+#include <Tone.h>
+#endif // USE_TONE
 
 // Function prototypes
 String PreZero(int digit);
@@ -92,8 +93,8 @@ String updateTemperatureString(float fDegrees);
 void testDS3231TempSensor(void);
 
 
-//IR remote control /////////// START /////////////////////////////
-#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+// Only if GPS module is used
+#if defined(USE_GPS) && USE_GPS
 
 #define GPS_SYNC_INTERVAL 1800000 // in milliseconds
 unsigned long Last_Time_GPS_Sync = 0;
@@ -103,6 +104,31 @@ uint32_t GPS_Sync_Interval=60000; // 1 minutes
 #include <NMEAGPS.h>
 static NMEAGPS  gps;
 static gps_fix  fix;
+
+#define GPS_BUFFER_LENGTH 83
+
+char GPS_Package[GPS_BUFFER_LENGTH];
+byte GPS_position=0;
+
+struct GPS_DATE_TIME
+{
+  byte GPS_hours;
+  byte GPS_minutes;
+  byte GPS_seconds;
+  byte GPS_day;
+  byte GPS_mounth;
+  int GPS_year; 
+  bool GPS_Valid_Data=false;
+  unsigned long GPS_Data_Parsed_time;
+};
+
+GPS_DATE_TIME GPS_Date_Time;
+
+#endif // USE_GPS
+
+
+// Only if IR remote control is used
+#if defined(USE_IR) && USE_IR
 
 #include <IRremote.h>
 int RECV_PIN = 4;
@@ -176,33 +202,13 @@ class IRButtonState
 IRButtonState IRModeButton(IR_BUTTON_MODE_CODE);
 IRButtonState IRUpButton(IR_BUTTON_UP_CODE);
 IRButtonState IRDownButton(IR_BUTTON_DOWN_CODE);
-#endif
+
+#endif // USE_IR
 
 
 int ModeButtonState = 0;
 int UpButtonState = 0;
 int DownButtonState = 0;
-
-//IR remote control /////////// START /////////////////////////////
-
-#define GPS_BUFFER_LENGTH 83
-
-char GPS_Package[GPS_BUFFER_LENGTH];
-byte GPS_position=0;
-
-struct GPS_DATE_TIME
-{
-  byte GPS_hours;
-  byte GPS_minutes;
-  byte GPS_seconds;
-  byte GPS_day;
-  byte GPS_mounth;
-  int GPS_year; 
-  bool GPS_Valid_Data=false;
-  unsigned long GPS_Data_Parsed_time;
-};
-
-GPS_DATE_TIME GPS_Date_Time;
 
 boolean UD, LD; // DOTS control;
 
@@ -210,18 +216,29 @@ byte data[12];
 byte addr[8];
 int celsius, fahrenheit;
 
-/*#define RedLedPin 9 //MCU WDM output for red LEDs 9-g
-#define GreenLedPin 6 //MCU WDM output for green LEDs 6-b
-#define BlueLedPin 3 //MCU WDM output for blue LEDs 3-r*/
+#if defined(USE_AVR) && USE_AVR
 #define pinSet A0
 #define pinUp A2
 #define pinDown A1
 //#define pinBuzzer 2
 const byte pinBuzzer = 2; // pomenyal
-#define pinUpperDots 12 //HIGH value light a dots
-#define pinLowerDots 8 //HIGH value light a dots
+//#define pinUpperDots 12 //HIGH value light a dots
+//#define pinLowerDots 8 //HIGH value light a dots
 #define pinTemp 7
 #define pinSHDN 5
+#elif defined(USE_ESP) && USE_ESP
+#define pinSet 3
+#define pinUp 3
+#define pinDown 3
+//#define pinBuzzer 16
+const byte pinBuzzer = 16; // pomenyal
+//#define pinUpperDots 12 //HIGH value light a dots
+//#define pinLowerDots 8 //HIGH value light a dots
+#define pinTemp 14
+#define pinSHDN 0
+#endif
+
+
 bool RTC_present;
 #define US_DateFormat 1
 #define EU_DateFormat 0
@@ -337,6 +354,8 @@ ClickButton upButton(pinUp, LOW, CLICKBTN_PULLUP);
 ClickButton downButton(pinDown, LOW, CLICKBTN_PULLUP);
 ///////////////////
 
+#if defined(USE_TONE) && USE_TONE
+
 Tone tone1;
 #define isdigit(n) (n >= '0' && n <= '9')
 //char *song = "MissionImp:d=16,o=6,b=95:32d,32d#,32d,32d#,32d,32d#,32d,32d#,32d,32d,32d#,32e,32f,32f#,32g,g,8p,g,8p,a#,p,c7,p,g,8p,g,8p,f,p,f#,p,g,8p,g,8p,a#,p,c7,p,g,8p,g,8p,f,p,f#,p,a#,g,2d,32p,a#,g,2c#,32p,a#,g,2c,a#5,8c,2p,32p,a#5,g5,2f#,32p,a#5,g5,2f,32p,a#5,g5,2e,d#,8d";
@@ -355,6 +374,8 @@ int notes[] = { 0,
                 NOTE_C6, NOTE_CS6, NOTE_D6, NOTE_DS6, NOTE_E6, NOTE_F6, NOTE_FS6, NOTE_G6, NOTE_GS6, NOTE_A6, NOTE_AS6, NOTE_B6,
                 NOTE_C7, NOTE_CS7, NOTE_D7, NOTE_DS7, NOTE_E7, NOTE_F7, NOTE_FS7, NOTE_G7, NOTE_GS7, NOTE_A7, NOTE_AS7, NOTE_B7
               };
+
+#endif // USE_TONE
 
 int fireforks[] = {0, 0, 1, //1
                    -1, 0, 0, //2
@@ -404,7 +425,6 @@ void setup()
   if (EEPROM.read(HoursOffsetEEPROMAddress) == 255) value[HoursOffsetIndex] = value[HoursOffsetIndex]; else value[HoursOffsetIndex] = EEPROM.read(HoursOffsetEEPROMAddress) + minValue[HoursOffsetIndex];
   if (EEPROM.read(DateFormatEEPROMAddress) == 255) value[DateFormatIndex] = value[DateFormatIndex]; else value[DateFormatIndex] = EEPROM.read(DateFormatEEPROMAddress);
   
-
   //Serial.print(F("led lock="));
   //Serial.println(LEDsLock);
 
@@ -412,8 +432,10 @@ void setup()
   pinMode(GreenLedPin, OUTPUT);
   pinMode(BlueLedPin, OUTPUT);*/
 
+#if defined(USE_TONE) && USE_TONE
   tone1.begin(pinBuzzer);
   song = parseSong(song);
+#endif // USE_TONE
 
   pinMode(LEpin, OUTPUT);
   pinMode(pinSHDN, OUTPUT);
@@ -467,10 +489,10 @@ void setup()
   }
   setTime(RTC_hours, RTC_minutes, RTC_seconds, RTC_day, RTC_month, RTC_year);
 
-#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+#if defined(USE_IR) && USE_IR
   irrecv.blink13(false);
   irrecv.enableIRIn(); // Start the receiver
-#endif
+#endif // USE_IR
 
 }
 
@@ -496,7 +518,7 @@ void loop() {
     //Serial.println(F("Sync"));
   }
 
-#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+#if defined(USE_GPS) && USE_GPS
 
   if (gps.available( Serial1 )) fix = gps.read(); 
     else fix.valid.time=false;
@@ -508,6 +530,10 @@ void loop() {
   }
   if (GPS_Sync_Flag==0) GPSCheckValidity();
   
+#endif // USE_GPS
+
+#if defined(USE_IR) && USE_IR
+
   IRresults.value = 0;
   if (irrecv.decode(&IRresults)) {
     Serial.println(IRresults.value, HEX);
@@ -531,7 +557,9 @@ void loop() {
   DownButtonState=0;
 #endif
 
+#if defined(USE_TONE) && USE_TONE
   p = playmusic(p);
+#endif
 
   if ((millis() - prevTime4FireWorks) > LEDsDelay)
   {
@@ -558,17 +586,21 @@ void loop() {
   if ((setButton.clicks > 0) || (ModeButtonState == 1)) //short click
   {
     modeChangedByUser = true;
+
+#if defined(USE_TONE) && USE_TONE
     p = 0; //shut off music )))
     tone1.play(1000, 100);
+#endif
+
     enteringEditModeTime = millis();
     /*if (value[DateFormatIndex] == US_DateFormat)
     {
       //if (menuPosition == )
     } else */
     menuPosition = menuPosition + 1;
-    #if defined (__AVR_ATmega328P__)
-      if (menuPosition == TimeZoneIndex) menuPosition++;// skip TimeZone for Arduino Uno
-    #endif
+#if !defined(USE_GPS) || (defined(USE_GPS) && !USE_GPS)
+      if (menuPosition == TimeZoneIndex) menuPosition++; // skip TimeZone if no GPS
+#endif
     if (menuPosition == LastParent + 1) menuPosition = TimeIndex;
     /*Serial.print(F("menuPosition="));
     Serial.println(menuPosition);
@@ -621,7 +653,11 @@ void loop() {
   }
   if ((setButton.clicks < 0) || (ModeButtonState == -1)) //long click
   {
+
+#if defined(USE_TONE) && USE_TONE
     tone1.play(1000, 100);
+#endif
+
     if (!editMode)
     {
       enteringEditModeTime = millis();
@@ -659,8 +695,12 @@ void loop() {
   if ((upButton.clicks > 0) || (UpButtonState == 1))
   {
     modeChangedByUser = true;
+
+#if defined(USE_TONE) && USE_TONE
     p = 0; //shut off music )))
     tone1.play(1000, 100);
+#endif
+
     incrementValue();
     if (!editMode)
     {
@@ -687,8 +727,12 @@ void loop() {
   if ((downButton.clicks > 0) || (DownButtonState == 1))
   {
     modeChangedByUser = true;
+
+#if defined(USE_TONE) && USE_TONE
     p = 0; //shut off music )))
     tone1.play(1000, 100);
+#endif
+
     dicrementValue();
     if (!editMode)
     {
@@ -724,7 +768,9 @@ void loop() {
   {
     if ((upButton.clicks < 0) || (UpButtonState == -1))
     {
+#if defined(USE_TONE) && USE_TONE
       tone1.play(1000, 100);
+#endif
       RGBLedsOn = true;
       EEPROM.write(RGBLEDsEEPROMAddress, 1);
       Serial.println(F("RGB=on"));
@@ -732,7 +778,9 @@ void loop() {
     }
     if ((downButton.clicks < 0) || (DownButtonState == -1))
     {
+#if defined(USE_TONE) && USE_TONE
       tone1.play(1000, 100);
+#endif
       RGBLedsOn = false;
       EEPROM.write(RGBLEDsEEPROMAddress, 0);
       Serial.println(F("RGB=off"));
@@ -854,20 +902,23 @@ void doTest()
   Serial.println(HardwareVersion);
   Serial.println(F("Start Test"));
   
+#if defined(USE_TONE) && USE_TONE
   p=song;
   parseSong(p);
   //p=0; //need to be deleted
+#endif
 
   LEDsTest();
   
-  #ifdef tubes8
+#if NUM_TUBES==8
   String testStringArray[11]={"00000000","11111111","22222222","33333333","44444444","55555555","66666666","77777777","88888888","99999999",""};
   testStringArray[10]=FirmwareVersion+"00";
-  #endif
-  #ifdef tubes6
+#elif NUM_TUBES==6
   String testStringArray[11]={"000000","111111","222222","333333","444444","555555","666666","777777","888888","999999",""};
   testStringArray[10]=FirmwareVersion;
-  #endif
+#else
+#error Illegal number of tubes
+#endif
   
   int dlay=500;
   bool test=1;
@@ -988,6 +1039,8 @@ bool isValidDate()
   else return true;
 
 }
+
+#if defined(USE_TONE) && USE_TONE
 
 byte default_dur = 4;
 byte default_oct = 6;
@@ -1147,6 +1200,8 @@ char* playmusic(char *p)
   return 0; //error
 }
 
+#endif // USE_TONE
+
 
 void incrementValue()
 {
@@ -1197,7 +1252,10 @@ void checkAlarmTime()
     lastTimeAlarmTriggired = millis();
     Alarm1SecondBlock = true;
     Serial.println(F("Wake up, Neo!"));
+
+#if defined(USE_TONE) && USE_TONE
     p = song;
+#endif
   }
 }
 
@@ -1326,7 +1384,7 @@ float getTemperature (boolean bTempFormat)
   return fDegrees;
 }
 
-#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+#if defined(USE_GPS) && USE_GPS
 
 void SyncWithGPS()
 {
@@ -1386,7 +1444,8 @@ void GPSCheckValidity()
     SyncWithGPS();
 }
 
-#endif
+#endif // USE_GPS
+
 
 String updateTemperatureString(float fDegrees)
 {
@@ -1414,9 +1473,9 @@ String updateTemperatureString(float fDegrees)
       if (abs(iDegrees) < 10) strTemp = "0000" + String(abs(iDegrees)/10) + "00";
     }
 
-    #ifdef tubes8
+#if NUM_TUBES==8
       strTemp= ""+strTemp+"00";
-    #endif
+#endif
     return strTemp;
   }
   return strTemp;
@@ -1436,11 +1495,13 @@ void testDS3231TempSensor()
   if ((DS3231InternalTemperature<5) || (DS3231InternalTemperature>65)) 
   {
     Serial.println(F("Faulty DS3231!"));
+#if defined(USE_TONE) && USE_TONE
     for (int i=0; i<5; i++)
     {
       //tone(pinBuzzer, 1000);
       tone1.play(1000, 1000);
       delay(2000);
     }
+#endif
   }
 }
