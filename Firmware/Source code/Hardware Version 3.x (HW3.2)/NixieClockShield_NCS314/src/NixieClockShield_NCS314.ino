@@ -52,6 +52,8 @@
 #define tubes6
 //#define tubes4
 
+#include <Arduino.h>
+
 #include <SPI.h>
 #include <Wire.h>
 #include <ClickButton.h>
@@ -59,7 +61,37 @@
 #include <Tone.h>
 #include <EEPROM.h>
 #include "doIndication314_HW3.x.h"
+#include "rotateFireWorks_SK.h"
 #include <OneWire.h>
+
+// Function prototypes
+String PreZero(int digit);
+String updateDisplayString(void);
+String getTimeNow(void);
+void doTest(void);
+void doDotBlink(void);
+void setRTCDateTime(byte h, byte m, byte s, byte d, byte mon, byte y, byte w);
+byte decToBcd(byte val);
+byte bcdToDec(byte val);
+void getRTCTime(void);
+int extractDigits(byte b);
+void injectDigits(byte b, int value);
+bool isValidDate(void);
+char* parseSong(char *p);
+char* playmusic(char *p);
+void incrementValue(void);
+void dicrementValue(void);
+void checkAlarmTime(void);
+void modesChanger(void);
+String antiPoisoning2(String fromStr, String toStr);
+String updateDateString(void);
+float getTemperature (boolean bTempFormat);
+void SyncWithGPS(void);
+void GPSCheckValidity(void);
+String updateTemperatureString(float fDegrees);
+void testDS3231TempSensor(void);
+
+
 //IR remote control /////////// START /////////////////////////////
 #if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
 
